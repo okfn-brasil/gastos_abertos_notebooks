@@ -17,7 +17,7 @@ pela Prefeitura de São Paulo.
  
  * [Análise da Execução por Secretaria](https://github.com/okfn-brasil/gastos_abertos_notebooks/raw/master/jupyter/python/Execu%C3%A7%C3%A3o%20por%20Secretaria.ipynb)
  Início do trabalho para verificar a execução orçamentária da cidade de São Paulo ao londo do ano, de acordo com o que está discutido na [lista](https://lists.okfn.org/pipermail/gastosabertos/2015-November/000359.html). 
- Esse trabalho inspirou também o [notebook](http://rpubs.com/carlosandrade/gastosabertos_est1) em R Markdown criado por Carlos Andrade, um membro da
+ Esse trabalho inspirou também o [notebook](http://rpubs.com/carlosandrade/gastosabertos_est1) em R Markdown criado por [Carlos Andrade](http://www.carlosandrade.co/), um membro da
  equipe do Gastos Abertos.
  
  
