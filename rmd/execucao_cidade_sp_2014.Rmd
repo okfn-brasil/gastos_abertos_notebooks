@@ -1,0 +1,141 @@
+---
+title: "Estória 1 - Execução do Orçamento da cidade de São Paulo - 2014"
+author: "Carlos V. A. Silva"
+date: "November 15, 2015"
+output:
+  html_document:
+    css: ~/OneDrive/Academia/Projects/inkCSS/res/css/style.css
+    highlight: zenburn  
+    toc: yes
+    toc_depth: 5
+  word_document: default
+---
+
+# Introdução
+
+Este notebook apresenta os dados utilizados na primeira estória do projeto Gastos Abertos. 
+
+# Dados
+   * Código Fonte: [Reposítorio Github da OKFN](https://github.com/okfn-brasil/gastos_abertos_notebooks/tree/master/rmd/execucao_cidade_sp_2014.Rmd)
+   * Fonte de Dados: [Prefeitura de SP](http://orcamento.prefeitura.sp.gov.br/orcamento/execucao.html).
+   * Referência de Análise de Dados: [Python Notebook](http://nbviewer.ipython.org/github/okfn-brasil/gastos_abertos_dados/blob/master/notebooks/Execu%C3%A7%C3%A3o%20por%20Secretaria.ipynb).
+   * Referência de Vocabulário e Contexto: Artigo de Blog - [Coisa Pública, Novembro de 2011](http://coisapublica-rs.blogspot.com/2011/11/empenho-liquidacao-pagamento.html).
+
+## Obtenção dos Dados 
+
+Os dados são separados em 12 arquivos, um para cada mês de 2014, através do site da prefeitura de SP. 
+
+```{r Parametros e Bibliotecas,warning=FALSE,message=FALSE}
+library(knitr)
+
+meses <- sprintf("%02d", 1:12)
+```
+
+```{r Baixar Dados,eval=FALSE}
+for(mes in meses){
+    url <- paste0("http://orcamento.prefeitura.sp.gov.br/orcamento/uploads/2014/qdd_",mes,"2014.xls")
+    savePath <- paste0("executado_",mes,"2014.xls")
+    download.file(url, destfile=savePath)
+} 
+```
+
+## Tabela de Dados
+
+Colocamos em memoria os 12 arquivos para os próximos passos de pre-processamento e salvamos em formato rds para simplificar o carregamento para analises posteriores. 
+
+```{r Carregar Dados,eval=FALSE}
+library(xlsx)
+workbook <- list()
+for(mes in meses){
+    loadPath <- paste0("executado_",mes,"2014.xls")
+    workbook[[mes]] <- read.xlsx(loadPath,1,header=TRUE)    
+}
+saveRDS(workbook,"workbook.rds")
+```
+
+A tabela a seguir demonstra as primeiras 6 linhas do mês de janeiro. 
+
+```{r Header Workbook 01}
+workbook <- readRDS("workbook.rds")
+kable(head(workbook[["01"]],6))
+```
+
+## Modelo de Dados 
+
+Infelizmente, a fonte de dados utilizada não possui um dicionario de dados. No entanto, a partir dos dados, podemos observar que cada linha especifica a despesa `Cd_Despesa` de um projeto de atividade `ProjetoAtividade` desempenhado por uma Unidade `Cd_Unidade`,`Ds_Unidade` pertencente a um orgão `Cd_Orgao`, `Ds_Orgao`do governo. 
+
+As siglas significam:
+
+* `Cd`: Código
+* `Ds`: Descrição
+* `Sld`: Saldo 
+* `Vl`: Valor
+
+Por exemplo:
+
+```{r Modelo Parte 1}
+kable(workbook[["01"]][218:222,c("Ds_Orgao","Ds_Unidade","ProjetoAtividade","Cd_Despesa")])
+```
+
+Para cada despesa `Cd_Despesa` de um projeto `ProjetoAtividade` é exibida a movimentação do recurso durante todo o mês (não é possível obter a informação em um menor intervalo de tempo). Especificamente, esta movimentação pode ser observada através de 4 valores. Os dois primeiros especificam quanto foi alocado para despesa `Cd_Despesa` para todo o ano `Sld_Orcado_Ano` e possíveis correções nesta alocação anual `Vl_Atualizado`. 
+
+Os dois valores restantes indicam o valor de obrigação que deve ser pago no mês em questão `Vl_EmpenhadoLiquido` determinado por autoridade competente e quanto deste valor foi pago ao credor `Vl_Liquidado` após confirmada que este realizou o projeto de atividade `ProjetoAtividade` e a sua associada despesa `Cd_Despesa` para o dado mês. 
+
+Por exemplo, observemos a seguinte despesa da **Autarquia Hospitalar Municipal** em janeiro:
+
+```{r Exemplo Janeiro}
+kable(workbook[["01"]][25,c("Ds_Unidade","ProjetoAtividade","Cd_Despesa","Sld_Orcado_Ano","Vl_Atualizado","Vl_EmpenhadoLiquido","Vl_Liquidado")])
+```
+
+e em fevereiro:
+
+```{r Exemplo Fevereiro}
+kable(workbook[["02"]][25,c("Ds_Unidade","ProjetoAtividade","Cd_Despesa","Sld_Orcado_Ano","Vl_Atualizado","Vl_EmpenhadoLiquido","Vl_Liquidado")])
+```
+ 
+ É observável que durante janeiro, foi determinada por autoridade competente `Vl_Empenhado_Liquido` o valor liquido de R$ 265.676,18 a ser pago por serviço a ser prestado (possivelmente através de contrato com empresas). Em fevereiro, parte deste serviço é comprovada e paga no valor de R$ 107.778,22.
+ 
+Em março: 
+
+```{r Exemplo Marco}
+kable(workbook[["03"]][25,c("Ds_Unidade","ProjetoAtividade","Cd_Despesa","Sld_Orcado_Ano","Vl_Atualizado","Vl_EmpenhadoLiquido","Vl_Liquidado")])
+``` 
+ 
+podemos notar que o valor empenhado cresce, bem como o liquidado. Nota-se também que estes valores são cumulativos ao invés de indicar o custo associado ao mês. Por fim, podemos observar esta transição através de um gráfico: 
+
+```{r Visualizacao,warning=FALSE,message=FALSE,fig.width=10,fig.height=10}
+library(reshape) #Formatação
+library(scales) #Formatar com virgulas ao inves de notação cientifica Y axis 
+library(GGally) #Grafico 
+library(ggplot2) #Grafico 
+science_theme = theme( #Tema
+    panel.background=element_blank(), 
+    axis.line=element_blank(),
+    text = element_text(size=15, family="Interstate"),
+    axis.text.x = element_text(hjust = 0, size=15,color="black"), 
+    axis.text.y = element_text(hjust = 0, size=15,color="black"), 
+    axis.title.y=element_text(size=15), 
+    axis.title.x=element_text(size=15),
+    axis.ticks = element_line(colour=NA),
+    panel.grid.major = element_line(colour = 'gray', linetype = 'dashed'),
+    panel.grid.minor = element_line(colour = NA),  
+    panel.background = element_rect(colour = 'white'))
+
+Empenhado <- sapply(workbook,"[",25,"Vl_EmpenhadoLiquido")
+Liquidado <- sapply(workbook,"[",25,"Vl_Liquidado")
+grafico <- data.frame(rbind(Liquidado,Empenhado))
+colnames(grafico) <- meses
+grafico$group <- rownames(grafico)
+
+ggparcoord(
+  data = grafico,
+  columns=c(1:(ncol(grafico)-1)),
+  scale="globalminmax",
+  groupColumn=ncol(grafico)
+) + science_theme  + 
+    scale_colour_manual(name="", values = c("Empenhado"="#024731", "Liquidado"="#94003C")) + 
+     scale_y_continuous(name="Valor (R$)", labels = comma) + xlab("Meses de 2014")
+```
+
+
+
